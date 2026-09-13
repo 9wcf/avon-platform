@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:ui';
@@ -8,6 +8,7 @@ import 'branches_tab.dart';
 import 'profile_screen.dart';
 import 'offers_screen.dart';
 import 'booking/booking_screen.dart';
+import 'user_screens.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -46,7 +47,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Colors.white.withOpacity(0.85),
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(color: Colors.white.withOpacity(0.9)),
-                boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.25), blurRadius: 25, offset: const Offset(0, 10))],
+                boxShadow: [
+                  BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.25), blurRadius: 25, offset: const Offset(0, 10)),
+                ],
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -109,6 +112,7 @@ class _HomeContentState extends State<HomeContent> {
   List<Map<String, dynamic>> _branches = [];
   Map<String, dynamic> _settings = {};
   bool _loading = true;
+  final TextEditingController _searchCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -116,17 +120,35 @@ class _HomeContentState extends State<HomeContent> {
     refresh();
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> refresh() async {
     final client = Supabase.instance.client;
-    try { _services = List<Map<String, dynamic>>.from(await client.from('services').select().eq('is_active', true)); } catch (_) {}
-    try { _doctors = List<Map<String, dynamic>>.from(await client.from('doctors').select().eq('is_active', true)); } catch (_) {}
-    try { _offers = List<Map<String, dynamic>>.from(await client.from('offers').select().eq('is_active', true)); } catch (_) {}
-    try { _branches = List<Map<String, dynamic>>.from(await client.from('branches').select().eq('is_active', true)); } catch (_) {}
+    try {
+      _services = List<Map<String, dynamic>>.from(await client.from('services').select().eq('is_active', true));
+    } catch (_) {}
+    try {
+      _doctors = List<Map<String, dynamic>>.from(await client.from('doctors').select().eq('is_active', true));
+    } catch (_) {}
+    try {
+      _offers = List<Map<String, dynamic>>.from(await client.from('offers').select().eq('is_active', true));
+    } catch (_) {}
+    try {
+      _branches = List<Map<String, dynamic>>.from(await client.from('branches').select().eq('is_active', true));
+    } catch (_) {}
     try {
       final st = await client.from('app_settings').select().limit(1);
       if (st.isNotEmpty) _settings = Map<String, dynamic>.from(st[0]);
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
+  }
+
+  void _openSearch(String q) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => SearchScreen(initialQuery: q.trim())));
   }
 
   String _serviceImage(Map<String, dynamic> s) {
@@ -205,31 +227,45 @@ class _HomeContentState extends State<HomeContent> {
         children: [
           Row(
             children: [
-              Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.auto_awesome, color: Colors.white, size: 22)),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
+                child: const Icon(Icons.auto_awesome, color: Colors.white, size: 22),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('مرحباً ' + name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')),
-                    Text((_settings['hero_subtitle'] ?? 'جمالك يبدأ من هنا').toString(), style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12, fontFamily: 'Tajawal')),
+                    Text('مرحباً ' + name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text((_settings['hero_subtitle'] ?? 'جمالك يبدأ من هنا').toString(), style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12, fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
-              Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.notifications_none, color: Colors.white, size: 22)),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
+                child: const Icon(Icons.notifications_none, color: Colors.white, size: 22),
+              ),
             ],
           ),
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(18)),
-            child: const TextField(
-              style: TextStyle(color: Colors.white, fontFamily: 'Tajawal'),
+            child: TextField(
+              controller: _searchCtrl,
+              style: const TextStyle(color: Colors.white, fontFamily: 'Tajawal'),
+              onSubmitted: _openSearch,
               decoration: InputDecoration(
                 hintText: 'ابحثي عن خدمة...',
-                hintStyle: TextStyle(color: Colors.white70, fontFamily: 'Tajawal'),
+                hintStyle: const TextStyle(color: Colors.white70, fontFamily: 'Tajawal'),
                 border: InputBorder.none,
-                icon: Icon(Icons.search, color: Colors.white),
+                icon: const Icon(Icons.search, color: Colors.white),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.arrow_forward, color: Colors.white),
+                  onPressed: () => _openSearch(_searchCtrl.text),
+                ),
               ),
             ),
           ),
@@ -259,7 +295,15 @@ class _HomeContentState extends State<HomeContent> {
           fit: StackFit.expand,
           children: [
             Image.asset('assets/images/lobby.jpg', fit: BoxFit.cover, errorBuilder: (c, e, s) => _placeholder()),
-            Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topRight, end: Alignment.bottomLeft, colors: [const Color(0xFFB76E79).withOpacity(0.75), const Color(0xFFE8B4B8).withOpacity(0.35)]))),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                  colors: [const Color(0xFFB76E79).withOpacity(0.75), const Color(0xFFE8B4B8).withOpacity(0.35)],
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -272,7 +316,14 @@ class _HomeContentState extends State<HomeContent> {
                     child: Text((_settings['hero_badge'] ?? '✨ عرض خاص').toString(), style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'Tajawal', fontWeight: FontWeight.w600)),
                   ),
                   const SizedBox(height: 10),
-                  Text((_settings['hero_title'] ?? 'جمالك يستحق الأفضل').toString(), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w300, color: Colors.white, fontFamily: 'Tajawal', height: 1.1)),
+                  Flexible(
+                    child: Text(
+                      (_settings['hero_title'] ?? 'جمالك يستحق الأفضل').toString(),
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w300, color: Colors.white, fontFamily: 'Tajawal', height: 1.1),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   const SizedBox(height: 14),
                   GestureDetector(
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BookingScreen(serviceName: 'تجميل البشرة'))),
@@ -311,18 +362,34 @@ class _HomeContentState extends State<HomeContent> {
           fit: StackFit.expand,
           children: [
             _img(img),
-            Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, const Color(0xFF7A3B47).withOpacity(0.9)]))),
-            Positioned(top: 12, right: 12, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: Text('خصم ' + discount.toString() + '%', style: const TextStyle(color: Color(0xFFB76E79), fontSize: 12, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')))),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, const Color(0xFF7A3B47).withOpacity(0.9)]),
+              ),
+            ),
             Positioned(
-              bottom: 14, left: 14, right: 14,
+              top: 12,
+              right: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                child: Text('خصم ' + discount.toString() + '%', style: const TextStyle(color: Color(0xFFB76E79), fontSize: 12, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')),
+              ),
+            ),
+            Positioned(
+              bottom: 14,
+              left: 14,
+              right: 14,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text((offer['title_ar'] ?? '').toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white, fontFamily: 'Tajawal')),
+                  Text((offer['title_ar'] ?? '').toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white, fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Text(offer['discounted_price'].toString() + ' د.ع', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, fontFamily: 'Tajawal')),
+                      Flexible(
+                        child: Text(offer['discounted_price'].toString() + ' د.ع', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, fontFamily: 'Tajawal'), overflow: TextOverflow.ellipsis),
+                      ),
                       const SizedBox(width: 10),
                       Text(offer['original_price'].toString() + ' د.ع', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.7), decoration: TextDecoration.lineThrough, fontFamily: 'Tajawal')),
                     ],
@@ -343,8 +410,7 @@ class _HomeContentState extends State<HomeContent> {
         children: [
           Container(width: 5, height: 22, decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFB76E79), Color(0xFFE8B4B8)]), borderRadius: BorderRadius.circular(4))),
           const SizedBox(width: 10),
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal')),
-          const Spacer(),
+          Expanded(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal'), overflow: TextOverflow.ellipsis)),
           GestureDetector(onTap: onAll, child: Text('عرض الكل', style: TextStyle(fontSize: 13, color: const Color(0xFFB76E79).withOpacity(0.9), fontFamily: 'Tajawal'))),
         ],
       ),
@@ -393,19 +459,8 @@ class _HomeContentState extends State<HomeContent> {
                             right: 8,
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.9),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                price + ' د.ع',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFFB76E79),
-                                  fontFamily: 'Tajawal',
-                                ),
-                              ),
+                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(12)),
+                              child: Text(price + ' د.ع', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFB76E79), fontFamily: 'Tajawal')),
                             ),
                           ),
                         ],
@@ -417,13 +472,13 @@ class _HomeContentState extends State<HomeContent> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal')),
+                        Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 6),
                         Row(
                           children: [
                             const Icon(Icons.schedule, size: 14, color: Color(0xFFB76E79)),
                             const SizedBox(width: 4),
-                            Text(duration + ' دقيقة', style: TextStyle(fontSize: 11, color: const Color(0xFF333333).withOpacity(0.6), fontFamily: 'Tajawal')),
+                            Flexible(child: Text(duration + ' دقيقة', style: TextStyle(fontSize: 11, color: const Color(0xFF333333).withOpacity(0.6), fontFamily: 'Tajawal'), overflow: TextOverflow.ellipsis)),
                           ],
                         ),
                       ],
@@ -453,7 +508,7 @@ class _HomeContentState extends State<HomeContent> {
             children: [
               Icon(Icons.local_offer, color: Color(0xFFB76E79)),
               SizedBox(width: 12),
-              Text('أضيفي عروضاً من لوحة التحكم', style: TextStyle(fontSize: 13, fontFamily: 'Tajawal', color: Color(0xFF333333))),
+              Flexible(child: Text('أضيفي عروضاً من لوحة التحكم', style: TextStyle(fontSize: 13, fontFamily: 'Tajawal', color: Color(0xFF333333)), overflow: TextOverflow.ellipsis)),
             ],
           ),
         ),
@@ -529,12 +584,12 @@ class _HomeContentState extends State<HomeContent> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal')),
+                Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(color: const Color(0xFFB76E79).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                  child: Text(spec, style: const TextStyle(fontSize: 11, color: Color(0xFFB76E79), fontFamily: 'Tajawal')),
+                  child: Text(spec, style: const TextStyle(fontSize: 11, color: Color(0xFFB76E79), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
               ],
             ),
@@ -546,17 +601,23 @@ class _HomeContentState extends State<HomeContent> {
 
   Widget _buildBranches() {
     if (_branches.isEmpty) {
-      return const SizedBox(height: 60, child: Center(child: Text('لا توجد فروع', style: TextStyle(fontFamily: 'Tajawal'))));
+      return const SizedBox(
+        height: 60,
+        child: Center(child: Text('لا توجد فروع', style: TextStyle(fontFamily: 'Tajawal'))),
+      );
     }
     return SizedBox(
-      height: 90,
+      height: 100,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         itemCount: _branches.length,
         itemBuilder: (context, index) {
           final b = _branches[index];
+          final bName = (b['name_ar'] ?? '').toString();
+          final bAddr = (b['address'] ?? '').toString();
           return Container(
+            width: 240,
             margin: const EdgeInsets.only(left: 12),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
@@ -567,18 +628,23 @@ class _HomeContentState extends State<HomeContent> {
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(color: const Color(0xFFB76E79).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
                   child: const Icon(Icons.location_on, color: Color(0xFFB76E79), size: 20),
                 ),
                 const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text((b['name_ar'] ?? '').toString(), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal')),
-                    Text((b['address'] ?? '').toString(), style: TextStyle(fontSize: 10, color: const Color(0xFF333333).withOpacity(0.5), fontFamily: 'Tajawal')),
-                  ],
+                SizedBox(
+                  width: 150,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(bName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 3),
+                      Text(bAddr, style: TextStyle(fontSize: 10, color: const Color(0xFF333333).withOpacity(0.5), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
                 ),
               ],
             ),
