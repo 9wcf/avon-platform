@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:ui';
@@ -9,6 +9,7 @@ import 'profile_screen.dart';
 import 'offers_screen.dart';
 import 'booking/booking_screen.dart';
 import 'user_screens.dart';
+import 'notifications_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -47,9 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Colors.white.withOpacity(0.85),
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(color: Colors.white.withOpacity(0.9)),
-                boxShadow: [
-                  BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.25), blurRadius: 25, offset: const Offset(0, 10)),
-                ],
+                boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.25), blurRadius: 25, offset: const Offset(0, 10))],
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -112,39 +111,67 @@ class _HomeContentState extends State<HomeContent> {
   List<Map<String, dynamic>> _branches = [];
   Map<String, dynamic> _settings = {};
   bool _loading = true;
+  int _unread = 0;
+  RealtimeChannel? _notifChannel;
   final TextEditingController _searchCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     refresh();
+    _loadUnread();
+    _subscribeNotif();
   }
 
   @override
   void dispose() {
+    _notifChannel?.unsubscribe();
     _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> refresh() async {
     final client = Supabase.instance.client;
-    try {
-      _services = List<Map<String, dynamic>>.from(await client.from('services').select().eq('is_active', true));
-    } catch (_) {}
-    try {
-      _doctors = List<Map<String, dynamic>>.from(await client.from('doctors').select().eq('is_active', true));
-    } catch (_) {}
-    try {
-      _offers = List<Map<String, dynamic>>.from(await client.from('offers').select().eq('is_active', true));
-    } catch (_) {}
-    try {
-      _branches = List<Map<String, dynamic>>.from(await client.from('branches').select().eq('is_active', true));
-    } catch (_) {}
+    try { _services = List<Map<String, dynamic>>.from(await client.from('services').select().eq('is_active', true)); } catch (_) {}
+    try { _doctors = List<Map<String, dynamic>>.from(await client.from('doctors').select().eq('is_active', true)); } catch (_) {}
+    try { _offers = List<Map<String, dynamic>>.from(await client.from('offers').select().eq('is_active', true)); } catch (_) {}
+    try { _branches = List<Map<String, dynamic>>.from(await client.from('branches').select().eq('is_active', true)); } catch (_) {}
     try {
       final st = await client.from('app_settings').select().limit(1);
       if (st.isNotEmpty) _settings = Map<String, dynamic>.from(st[0]);
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _loadUnread() async {
+    final u = Supabase.instance.client.auth.currentUser;
+    if (u == null) return;
+    try {
+      final res = await Supabase.instance.client.from('notifications').select('id').eq('user_id', u.id).eq('is_read', false);
+      if (mounted) setState(() => _unread = res.length);
+    } catch (_) {}
+  }
+
+  void _subscribeNotif() {
+    final u = Supabase.instance.client.auth.currentUser;
+    if (u == null) return;
+    _notifChannel = Supabase.instance.client
+        .channel('home_notif_${u.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'notifications',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: u.id),
+          callback: (payload) => _loadUnread(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'notifications',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: u.id),
+          callback: (payload) => _loadUnread(),
+        )
+        .subscribe();
   }
 
   void _openSearch(String q) {
@@ -227,11 +254,7 @@ class _HomeContentState extends State<HomeContent> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
-                child: const Icon(Icons.auto_awesome, color: Colors.white, size: 22),
-              ),
+              Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.auto_awesome, color: Colors.white, size: 22)),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -242,10 +265,31 @@ class _HomeContentState extends State<HomeContent> {
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
-                child: const Icon(Icons.notifications_none, color: Colors.white, size: 22),
+              GestureDetector(
+                onTap: () async {
+                  await Navigator.push(context, MaterialPageRoute(builder: (_) => const AppNotificationsScreen()));
+                  _loadUnread();
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Icon(Icons.notifications_none, color: Colors.white, size: 22),
+                      if (_unread > 0)
+                        Positioned(
+                          top: -5,
+                          right: -5,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(color: const Color(0xFFC62828), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white, width: 1)),
+                            child: Text(_unread > 9 ? '9+' : _unread.toString(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
@@ -262,10 +306,7 @@ class _HomeContentState extends State<HomeContent> {
                 hintStyle: const TextStyle(color: Colors.white70, fontFamily: 'Tajawal'),
                 border: InputBorder.none,
                 icon: const Icon(Icons.search, color: Colors.white),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.arrow_forward, color: Colors.white),
-                  onPressed: () => _openSearch(_searchCtrl.text),
-                ),
+                suffixIcon: IconButton(icon: const Icon(Icons.arrow_forward, color: Colors.white), onPressed: () => _openSearch(_searchCtrl.text)),
               ),
             ),
           ),
@@ -295,15 +336,7 @@ class _HomeContentState extends State<HomeContent> {
           fit: StackFit.expand,
           children: [
             Image.asset('assets/images/lobby.jpg', fit: BoxFit.cover, errorBuilder: (c, e, s) => _placeholder()),
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topRight,
-                  end: Alignment.bottomLeft,
-                  colors: [const Color(0xFFB76E79).withOpacity(0.75), const Color(0xFFE8B4B8).withOpacity(0.35)],
-                ),
-              ),
-            ),
+            Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topRight, end: Alignment.bottomLeft, colors: [const Color(0xFFB76E79).withOpacity(0.75), const Color(0xFFE8B4B8).withOpacity(0.35)]))),
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -317,12 +350,7 @@ class _HomeContentState extends State<HomeContent> {
                   ),
                   const SizedBox(height: 10),
                   Flexible(
-                    child: Text(
-                      (_settings['hero_title'] ?? 'جمالك يستحق الأفضل').toString(),
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w300, color: Colors.white, fontFamily: 'Tajawal', height: 1.1),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: Text((_settings['hero_title'] ?? 'جمالك يستحق الأفضل').toString(), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w300, color: Colors.white, fontFamily: 'Tajawal', height: 1.1), maxLines: 2, overflow: TextOverflow.ellipsis),
                   ),
                   const SizedBox(height: 14),
                   GestureDetector(
@@ -330,14 +358,7 @@ class _HomeContentState extends State<HomeContent> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('احجزي الآن', style: TextStyle(color: Color(0xFFB76E79), fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'Tajawal')),
-                          SizedBox(width: 6),
-                          Icon(Icons.arrow_back, color: Color(0xFFB76E79), size: 16),
-                        ],
-                      ),
+                      child: const Row(mainAxisSize: MainAxisSize.min, children: [Text('احجزي الآن', style: TextStyle(color: Color(0xFFB76E79), fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'Tajawal')), SizedBox(width: 6), Icon(Icons.arrow_back, color: Color(0xFFB76E79), size: 16)]),
                     ),
                   ),
                 ],
@@ -362,24 +383,10 @@ class _HomeContentState extends State<HomeContent> {
           fit: StackFit.expand,
           children: [
             _img(img),
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, const Color(0xFF7A3B47).withOpacity(0.9)]),
-              ),
-            ),
+            Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, const Color(0xFF7A3B47).withOpacity(0.9)]))),
+            Positioned(top: 12, right: 12, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: Text('خصم ' + discount.toString() + '%', style: const TextStyle(color: Color(0xFFB76E79), fontSize: 12, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')))),
             Positioned(
-              top: 12,
-              right: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-                child: Text('خصم ' + discount.toString() + '%', style: const TextStyle(color: Color(0xFFB76E79), fontSize: 12, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')),
-              ),
-            ),
-            Positioned(
-              bottom: 14,
-              left: 14,
-              right: 14,
+              bottom: 14, left: 14, right: 14,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -387,9 +394,7 @@ class _HomeContentState extends State<HomeContent> {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Flexible(
-                        child: Text(offer['discounted_price'].toString() + ' د.ع', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, fontFamily: 'Tajawal'), overflow: TextOverflow.ellipsis),
-                      ),
+                      Flexible(child: Text(offer['discounted_price'].toString() + ' د.ع', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, fontFamily: 'Tajawal'), overflow: TextOverflow.ellipsis)),
                       const SizedBox(width: 10),
                       Text(offer['original_price'].toString() + ' د.ع', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.7), decoration: TextDecoration.lineThrough, fontFamily: 'Tajawal')),
                     ],
@@ -437,11 +442,7 @@ class _HomeContentState extends State<HomeContent> {
             child: Container(
               width: 165,
               margin: const EdgeInsets.only(left: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 6))],
-              ),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 6))]),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -454,15 +455,7 @@ class _HomeContentState extends State<HomeContent> {
                         fit: StackFit.expand,
                         children: [
                           _img(_serviceImage(s)),
-                          Positioned(
-                            bottom: 8,
-                            right: 8,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(12)),
-                              child: Text(price + ' د.ع', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFB76E79), fontFamily: 'Tajawal')),
-                            ),
-                          ),
+                          Positioned(bottom: 8, right: 8, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(12)), child: Text(price + ' د.ع', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFB76E79), fontFamily: 'Tajawal')))),
                         ],
                       ),
                     ),
@@ -475,6 +468,7 @@ class _HomeContentState extends State<HomeContent> {
                         Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 6),
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Icon(Icons.schedule, size: 14, color: Color(0xFFB76E79)),
                             const SizedBox(width: 4),
@@ -499,18 +493,8 @@ class _HomeContentState extends State<HomeContent> {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [const Color(0xFFB76E79).withOpacity(0.1), const Color(0xFFE8B4B8).withOpacity(0.1)]),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFB76E79).withOpacity(0.2)),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.local_offer, color: Color(0xFFB76E79)),
-              SizedBox(width: 12),
-              Flexible(child: Text('أضيفي عروضاً من لوحة التحكم', style: TextStyle(fontSize: 13, fontFamily: 'Tajawal', color: Color(0xFF333333)), overflow: TextOverflow.ellipsis)),
-            ],
-          ),
+          decoration: BoxDecoration(gradient: LinearGradient(colors: [const Color(0xFFB76E79).withOpacity(0.1), const Color(0xFFE8B4B8).withOpacity(0.1)]), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFB76E79).withOpacity(0.2))),
+          child: const Row(children: [Icon(Icons.local_offer, color: Color(0xFFB76E79)), SizedBox(width: 12), Flexible(child: Text('أضيفي عروضاً من لوحة التحكم', style: TextStyle(fontSize: 13, fontFamily: 'Tajawal', color: Color(0xFF333333)), overflow: TextOverflow.ellipsis))]),
         ),
       );
     }
@@ -543,11 +527,7 @@ class _HomeContentState extends State<HomeContent> {
             width: 160,
             margin: const EdgeInsets.only(left: 12),
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 6))],
-            ),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 6))]),
             child: Column(
               children: [
                 Stack(
@@ -555,42 +535,16 @@ class _HomeContentState extends State<HomeContent> {
                     Container(
                       width: 64,
                       height: 64,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(colors: [Color(0xFFE8B4B8), Color(0xFFB76E79)]),
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.4), blurRadius: 12)],
-                      ),
-                      child: d['image_url'] != null && d['image_url'].toString().startsWith('http')
-                          ? ClipOval(child: Image.network(d['image_url'].toString(), fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.person, color: Colors.white, size: 30)))
-                          : const Icon(Icons.person, color: Colors.white, size: 30),
+                      decoration: BoxDecoration(shape: BoxShape.circle, gradient: const LinearGradient(colors: [Color(0xFFE8B4B8), Color(0xFFB76E79)]), border: Border.all(color: Colors.white, width: 3), boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.4), blurRadius: 12)]),
+                      child: d['image_url'] != null && d['image_url'].toString().startsWith('http') ? ClipOval(child: Image.network(d['image_url'].toString(), fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.person, color: Colors.white, size: 30))) : const Icon(Icons.person, color: Colors.white, size: 30),
                     ),
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: const Color(0xFFD4AF37), borderRadius: BorderRadius.circular(8)),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.star, size: 10, color: Colors.white),
-                            SizedBox(width: 2),
-                            Text('5.0', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w800)),
-                          ],
-                        ),
-                      ),
-                    ),
+                    Positioned(bottom: 0, left: 0, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: const Color(0xFFD4AF37), borderRadius: BorderRadius.circular(8)), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.star, size: 10, color: Colors.white), SizedBox(width: 2), Text('5.0', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w800))]))),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: const Color(0xFFB76E79).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                  child: Text(spec, style: const TextStyle(fontSize: 11, color: Color(0xFFB76E79), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: const Color(0xFFB76E79).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Text(spec, style: const TextStyle(fontSize: 11, color: Color(0xFFB76E79), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis)),
               ],
             ),
           ).animate().fadeIn(delay: Duration(milliseconds: index * 80), duration: 500.ms);
@@ -601,10 +555,7 @@ class _HomeContentState extends State<HomeContent> {
 
   Widget _buildBranches() {
     if (_branches.isEmpty) {
-      return const SizedBox(
-        height: 60,
-        child: Center(child: Text('لا توجد فروع', style: TextStyle(fontFamily: 'Tajawal'))),
-      );
+      return const SizedBox(height: 60, child: Center(child: Text('لا توجد فروع', style: TextStyle(fontFamily: 'Tajawal'))));
     }
     return SizedBox(
       height: 100,
@@ -620,19 +571,10 @@ class _HomeContentState extends State<HomeContent> {
             width: 240,
             margin: const EdgeInsets.only(left: 12),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.12), blurRadius: 10, offset: const Offset(0, 4))],
-            ),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.12), blurRadius: 10, offset: const Offset(0, 4))]),
             child: Row(
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(color: const Color(0xFFB76E79).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.location_on, color: Color(0xFFB76E79), size: 20),
-                ),
+                Container(width: 40, height: 40, decoration: BoxDecoration(color: const Color(0xFFB76E79).withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.location_on, color: Color(0xFFB76E79), size: 20)),
                 const SizedBox(width: 10),
                 SizedBox(
                   width: 150,
