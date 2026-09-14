@@ -1,0 +1,15 @@
+﻿# Mobile App
+mobile_app/.dart_tool/
+mobile_app/build/
+mobile_app/*.iml
+mobile_app/.idea/
+
+# Admin Panel (Allow folder, ignore heavy files)
+admin_pro/node_modules/
+admin_pro/.next/
+admin_pro/out/
+admin_pro/.env.local
+
+# General
+*.log
+.DS_Store
