@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../login_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
@@ -387,4 +388,14 @@ class _BookingScreenState extends State<BookingScreen> {
       ),
     );
   }
-}
+
+  void _requireAuth() {
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      });
+    }
+  }}

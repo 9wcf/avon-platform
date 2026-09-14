@@ -136,3 +136,35 @@ class _AVONAppState extends State<AVONApp> {
     );
   }
 }
+
+class _SplashWrapper extends StatefulWidget {
+  const _SplashWrapper();
+  @override
+  State<_SplashWrapper> createState() => _SplashWrapperState();
+}
+
+class _SplashWrapperState extends State<_SplashWrapper> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SplashScreen();
+}
