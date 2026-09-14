@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:ui';
@@ -7,6 +7,7 @@ import 'doctors_screen.dart';
 import 'branches_tab.dart';
 import 'profile_screen.dart';
 import 'offers_screen.dart';
+import 'details/doctor_details_screen.dart';
 import 'booking/booking_screen.dart';
 import 'user_screens.dart';
 import 'notifications_screen.dart';
@@ -48,7 +49,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Colors.white.withOpacity(0.85),
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(color: Colors.white.withOpacity(0.9)),
-                boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.25), blurRadius: 25, offset: const Offset(0, 10))],
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFB76E79).withOpacity(0.25),
+                    blurRadius: 25,
+                    offset: const Offset(0, 10),
+                  )
+                ],
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -79,17 +86,39 @@ class _HomeScreenState extends State<HomeScreen> {
         curve: Curves.easeOut,
         padding: EdgeInsets.symmetric(horizontal: selected ? 18 : 12, vertical: 10),
         decoration: BoxDecoration(
-          gradient: selected ? const LinearGradient(colors: [Color(0xFFB76E79), Color(0xFFD4909C)]) : null,
+          gradient: selected
+              ? const LinearGradient(colors: [Color(0xFFB76E79), Color(0xFFD4909C)])
+              : null,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: selected ? [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 5))] : null,
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFB76E79).withOpacity(0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
+                  )
+                ]
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 22, color: selected ? Colors.white : const Color(0xFFB76E79).withOpacity(0.6)),
+            Icon(
+              icon,
+              size: 22,
+              color: selected ? Colors.white : const Color(0xFFB76E79).withOpacity(0.6),
+            ),
             if (selected) ...[
               const SizedBox(width: 8),
-              Text(label, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'Tajawal')),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Tajawal',
+                ),
+              ),
             ],
           ],
         ),
@@ -112,14 +141,16 @@ class _HomeContentState extends State<HomeContent> {
   Map<String, dynamic> _settings = {};
   bool _loading = true;
   int _unread = 0;
+  List<Map<String, dynamic>> _notifs = [];
   RealtimeChannel? _notifChannel;
   final TextEditingController _searchCtrl = TextEditingController();
+  final GlobalKey _bellKey = GlobalKey(); // ✅ مفتاح لموقع الجرس
 
   @override
   void initState() {
     super.initState();
     refresh();
-    _loadUnread();
+    _loadNotifs();
     _subscribeNotif();
   }
 
@@ -132,10 +163,26 @@ class _HomeContentState extends State<HomeContent> {
 
   Future<void> refresh() async {
     final client = Supabase.instance.client;
-    try { _services = List<Map<String, dynamic>>.from(await client.from('services').select().eq('is_active', true)); } catch (_) {}
-    try { _doctors = List<Map<String, dynamic>>.from(await client.from('doctors').select().eq('is_active', true)); } catch (_) {}
-    try { _offers = List<Map<String, dynamic>>.from(await client.from('offers').select().eq('is_active', true)); } catch (_) {}
-    try { _branches = List<Map<String, dynamic>>.from(await client.from('branches').select().eq('is_active', true)); } catch (_) {}
+    try {
+      _services = List<Map<String, dynamic>>.from(
+        await client.from('services').select().eq('is_active', true),
+      );
+    } catch (_) {}
+    try {
+      _doctors = List<Map<String, dynamic>>.from(
+        await client.from('doctors').select().eq('is_active', true),
+      );
+    } catch (_) {}
+    try {
+      _offers = List<Map<String, dynamic>>.from(
+        await client.from('offers').select().eq('is_active', true),
+      );
+    } catch (_) {}
+    try {
+      _branches = List<Map<String, dynamic>>.from(
+        await client.from('branches').select().eq('is_active', true),
+      );
+    } catch (_) {}
     try {
       final st = await client.from('app_settings').select().limit(1);
       if (st.isNotEmpty) _settings = Map<String, dynamic>.from(st[0]);
@@ -143,39 +190,274 @@ class _HomeContentState extends State<HomeContent> {
     if (mounted) setState(() => _loading = false);
   }
 
-  Future<void> _loadUnread() async {
+  Future<void> _loadNotifs() async {
     final u = Supabase.instance.client.auth.currentUser;
     if (u == null) return;
     try {
-      final res = await Supabase.instance.client.from('notifications').select('id').eq('user_id', u.id).eq('is_read', false);
-      if (mounted) setState(() => _unread = res.length);
+      final all = await Supabase.instance.client
+          .from('notifications')
+          .select('*')
+          .eq('user_id', u.id)
+          .order('created_at', ascending: false)
+          .limit(5);
+      final unread = await Supabase.instance.client
+          .from('notifications')
+          .select('id')
+          .eq('user_id', u.id)
+          .eq('is_read', false);
+      if (mounted) {
+        setState(() {
+          _notifs = List<Map<String, dynamic>>.from(all);
+          _unread = unread.length;
+        });
+      }
     } catch (_) {}
   }
 
   void _subscribeNotif() {
     final u = Supabase.instance.client.auth.currentUser;
     if (u == null) return;
-    _notifChannel = Supabase.instance.client
-        .channel('home_notif_${u.id}')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'notifications',
-          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: u.id),
-          callback: (payload) => _loadUnread(),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'notifications',
-          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: u.id),
-          callback: (payload) => _loadUnread(),
-        )
-        .subscribe();
+    try {
+      _notifChannel = Supabase.instance.client
+          .channel('home_notif_${u.id}')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'notifications',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: u.id,
+            ),
+            callback: (_) => _loadNotifs(),
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: 'notifications',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: u.id,
+            ),
+            callback: (_) => _loadNotifs(),
+          )
+          .subscribe();
+    } catch (_) {}
+  }
+
+  Future<void> _showNotifDropdown() async {
+    final box = _bellKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final offset = box.localToGlobal(Offset.zero);
+    final size = box.size;
+
+    final selected = await showMenu<Map<String, dynamic>>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        offset.dx - 260,
+        offset.dy + size.height + 8,
+        offset.dx + size.width,
+        offset.dy + size.height + 8,
+      ),
+      constraints: const BoxConstraints(maxWidth: 340, minHeight: 200),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      color: Colors.white,
+      elevation: 8,
+      items: [
+        const PopupMenuItem<Map<String, dynamic>>(
+          enabled: false,
+          height: 48,
+          child: Row(children: [
+            Icon(Icons.notifications, color: Color(0xFFB76E79), size: 22),
+            SizedBox(width: 8),
+            Text(
+              'الإشعارات',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF333333),
+                fontFamily: 'Tajawal',
+              ),
+            ),
+          ]),
+        ),
+        const PopupMenuDivider(height: 1),
+        if (_notifs.isEmpty)
+          const PopupMenuItem<Map<String, dynamic>>(
+            enabled: false,
+            height: 80,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.notifications_none, size: 36, color: Color(0xFFE8B4B8)),
+                  SizedBox(height: 8),
+                  Text(
+                    'لا توجد إشعارات',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontFamily: 'Tajawal',
+                      color: Color(0xFF999999),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ..._notifs.map((n) {
+            final type = (n['type'] ?? 'info').toString();
+            final isRead = n['is_read'] == true;
+            Color color = const Color(0xFFB76E79);
+            IconData icon = Icons.notifications;
+            if (type == 'approved') {
+              color = const Color(0xFF2E7D32);
+              icon = Icons.check_circle;
+            } else if (type == 'rejected') {
+              color = const Color(0xFFC62828);
+              icon = Icons.error;
+            } else if (type == 'admin_message') {
+              color = const Color(0xFF1976D2);
+              icon = Icons.chat;
+            } else if (type == 'new_booking') {
+              color = const Color(0xFFD4AF37);
+              icon = Icons.event;
+            }
+
+            final created = (n['created_at'] ?? '').toString();
+            final time = created.length >= 16
+                ? created.replaceAll('T', ' ').substring(11, 16)
+                : '';
+
+            return PopupMenuItem<Map<String, dynamic>>(
+              value: n,
+              height: 72,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(icon, color: color, size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            (n['title'] ?? '').toString(),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF333333),
+                              fontFamily: 'Tajawal',
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            (n['body'] ?? '').toString(),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF666666),
+                              fontFamily: 'Tajawal',
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (time.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                time,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.grey.shade500,
+                                  fontFamily: 'Tajawal',
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (!isRead)
+                      Container(
+                        width: 8,
+                        height: 8,
+                        margin: const EdgeInsets.only(top: 8, right: 4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFC62828),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        if (_notifs.isNotEmpty) const PopupMenuDivider(height: 1),
+        if (_notifs.isNotEmpty)
+          PopupMenuItem<Map<String, dynamic>>(
+            onTap: () {
+              // ✅ فتح شاشة كل الإشعارات بعد إغلاق القائمة
+              Future.microtask(() {
+                if (!mounted) return;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                );
+              });
+            },
+            height: 44,
+            child: const Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.list, size: 16, color: Color(0xFFB76E79)),
+                  SizedBox(width: 6),
+                  Text(
+                    'عرض كل الإشعارات',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFB76E79),
+                      fontFamily: 'Tajawal',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+
+    // ✅ التعامل مع الاختيار بعد انتهاء showMenu
+    if (selected != null && mounted) {
+      try {
+        await Supabase.instance.client
+            .from('notifications')
+            .update({'is_read': true}).eq('id', selected['id']);
+        _loadNotifs();
+      } catch (_) {}
+    }
   }
 
   void _openSearch(String q) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => SearchScreen(initialQuery: q.trim())));
+    final query = q.trim();
+    if (query.isEmpty) return; // ✅ تجاهل البحث الفارغ
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => SearchScreen(initialQuery: query)),
+    );
   }
 
   String _serviceImage(Map<String, dynamic> s) {
@@ -190,14 +472,24 @@ class _HomeContentState extends State<HomeContent> {
 
   Widget _img(String src) {
     if (src.startsWith('http')) {
-      return Image.network(src, fit: BoxFit.cover, errorBuilder: (c, e, s) => _placeholder());
+      return Image.network(
+        src,
+        fit: BoxFit.cover,
+        errorBuilder: (c, e, s) => _placeholder(),
+      );
     }
-    return Image.asset(src, fit: BoxFit.cover, errorBuilder: (c, e, s) => _placeholder());
+    return Image.asset(
+      src,
+      fit: BoxFit.cover,
+      errorBuilder: (c, e, s) => _placeholder(),
+    );
   }
 
   Widget _placeholder() {
     return Container(
-      decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFFE8B4B8), Color(0xFFB76E79)])),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(colors: [Color(0xFFE8B4B8), Color(0xFFB76E79)]),
+      ),
       child: const Center(child: Icon(Icons.spa, color: Colors.white, size: 40)),
     );
   }
@@ -205,12 +497,16 @@ class _HomeContentState extends State<HomeContent> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(backgroundColor: Color(0xFFF8F4F0), body: Center(child: CircularProgressIndicator(color: Color(0xFFB76E79))));
+      return const Scaffold(
+        backgroundColor: Color(0xFFF8F4F0),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFB76E79))),
+      );
     }
     return RefreshIndicator(
       onRefresh: refresh,
       color: const Color(0xFFB76E79),
       child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -218,19 +514,43 @@ class _HomeContentState extends State<HomeContent> {
             const SizedBox(height: 20),
             _buildOffersBanner(),
             const SizedBox(height: 24),
-            _sectionHeader('خدماتنا المميزة', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServicesScreen()))),
+            _sectionHeader(
+              'خدماتنا المميزة',
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ServicesScreen()),
+              ),
+            ),
             const SizedBox(height: 14),
             _buildServices(),
             const SizedBox(height: 24),
-            _sectionHeader('عروض حصرية', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OffersScreen()))),
+            _sectionHeader(
+              'عروض حصرية',
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const OffersScreen()),
+              ),
+            ),
             const SizedBox(height: 14),
             _buildOffersRow(),
             const SizedBox(height: 24),
-            _sectionHeader('نخبة الأطباء', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DoctorsScreen()))),
+            _sectionHeader(
+              'نخبة الأطباء',
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DoctorsScreen()),
+              ),
+            ),
             const SizedBox(height: 14),
             _buildDoctors(),
             const SizedBox(height: 24),
-            _sectionHeader('فروعنا', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BranchesTab()))),
+            _sectionHeader(
+              'فروعنا',
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BranchesTab()),
+              ),
+            ),
             const SizedBox(height: 14),
             _buildBranches(),
             const SizedBox(height: 110),
@@ -242,10 +562,16 @@ class _HomeContentState extends State<HomeContent> {
 
   Widget _buildHeader() {
     final user = Supabase.instance.client.auth.currentUser;
-    final name = user?.email?.split('@').first ?? 'جميلتنا';
+    final email = user?.email ?? '';
+    final name = email.contains('@') ? email.split('@').first : (email.isEmpty ? 'جميلتنا' : email);
+
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFB76E79), Color(0xFFC98A94), Color(0xFFE8B4B8)]),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFB76E79), Color(0xFFC98A94), Color(0xFFE8B4B8)],
+        ),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(36)),
       ),
       padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 20, 20, 28),
@@ -254,25 +580,52 @@ class _HomeContentState extends State<HomeContent> {
         children: [
           Row(
             children: [
-              Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.auto_awesome, color: Colors.white, size: 22)),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(Icons.auto_awesome, color: Colors.white, size: 22),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('مرحباً ' + name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    Text((_settings['hero_subtitle'] ?? 'جمالك يبدأ من هنا').toString(), style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12, fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      'مرحباً $name',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        fontFamily: 'Tajawal',
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      (_settings['hero_subtitle'] ?? 'جمالك يبدأ من هنا').toString(),
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 12,
+                        fontFamily: 'Tajawal',
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
               GestureDetector(
-                onTap: () async {
-                  await Navigator.push(context, MaterialPageRoute(builder: (_) => const AppNotificationsScreen()));
-                  _loadUnread();
-                },
+                key: _bellKey, // ✅ مفتاح لتحديد موقع الجرس
+                onTap: _showNotifDropdown,
                 child: Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
@@ -283,8 +636,19 @@ class _HomeContentState extends State<HomeContent> {
                           right: -5,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(color: const Color(0xFFC62828), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white, width: 1)),
-                            child: Text(_unread > 9 ? '9+' : _unread.toString(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFC62828),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.white, width: 1),
+                            ),
+                            child: Text(
+                              _unread > 9 ? '9+' : _unread.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
                         ),
                     ],
@@ -296,7 +660,10 @@ class _HomeContentState extends State<HomeContent> {
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(18)),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(18),
+            ),
             child: TextField(
               controller: _searchCtrl,
               style: const TextStyle(color: Colors.white, fontFamily: 'Tajawal'),
@@ -306,7 +673,10 @@ class _HomeContentState extends State<HomeContent> {
                 hintStyle: const TextStyle(color: Colors.white70, fontFamily: 'Tajawal'),
                 border: InputBorder.none,
                 icon: const Icon(Icons.search, color: Colors.white),
-                suffixIcon: IconButton(icon: const Icon(Icons.arrow_forward, color: Colors.white), onPressed: () => _openSearch(_searchCtrl.text)),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.arrow_forward, color: Colors.white),
+                  onPressed: () => _openSearch(_searchCtrl.text),
+                ),
               ),
             ),
           ),
@@ -335,8 +705,23 @@ class _HomeContentState extends State<HomeContent> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.asset('assets/images/lobby.jpg', fit: BoxFit.cover, errorBuilder: (c, e, s) => _placeholder()),
-            Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topRight, end: Alignment.bottomLeft, colors: [const Color(0xFFB76E79).withOpacity(0.75), const Color(0xFFE8B4B8).withOpacity(0.35)]))),
+            Image.asset(
+              'assets/images/lobby.jpg',
+              fit: BoxFit.cover,
+              errorBuilder: (c, e, s) => _placeholder(),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                  colors: [
+                    const Color(0xFFB76E79).withOpacity(0.75),
+                    const Color(0xFFE8B4B8).withOpacity(0.35),
+                  ],
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -345,20 +730,66 @@ class _HomeContentState extends State<HomeContent> {
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.3), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.5))),
-                    child: Text((_settings['hero_badge'] ?? '✨ عرض خاص').toString(), style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'Tajawal', fontWeight: FontWeight.w600)),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.5)),
+                    ),
+                    child: Text(
+                      (_settings['hero_badge'] ?? '✨ عرض خاص').toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontFamily: 'Tajawal',
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Flexible(
-                    child: Text((_settings['hero_title'] ?? 'جمالك يستحق الأفضل').toString(), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w300, color: Colors.white, fontFamily: 'Tajawal', height: 1.1), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      (_settings['hero_title'] ?? 'جمالك يستحق الأفضل').toString(),
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w300,
+                        color: Colors.white,
+                        fontFamily: 'Tajawal',
+                        height: 1.1,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   GestureDetector(
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BookingScreen(serviceName: 'تجميل البشرة'))),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const BookingScreen(serviceName: 'تجميل البشرة'),
+                      ),
+                    ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                      child: const Row(mainAxisSize: MainAxisSize.min, children: [Text('احجزي الآن', style: TextStyle(color: Color(0xFFB76E79), fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'Tajawal')), SizedBox(width: 6), Icon(Icons.arrow_back, color: Color(0xFFB76E79), size: 16)]),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'احجزي الآن',
+                            style: TextStyle(
+                              color: Color(0xFFB76E79),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'Tajawal',
+                            ),
+                          ),
+                          SizedBox(width: 6),
+                          Icon(Icons.arrow_back, color: Color(0xFFB76E79), size: 16),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -373,36 +804,105 @@ class _HomeContentState extends State<HomeContent> {
   Widget _offerCard(Map<String, dynamic> offer) {
     final discount = offer['discount_percentage'] ?? 0;
     final url = offer['image_url'];
-    final img = (url != null && url.toString().startsWith('http')) ? url.toString() : 'assets/images/treatment.jpg';
-    return Container(
-      width: 280,
-      margin: const EdgeInsets.only(left: 12),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _img(img),
-            Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, const Color(0xFF7A3B47).withOpacity(0.9)]))),
-            Positioned(top: 12, right: 12, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: Text('خصم ' + discount.toString() + '%', style: const TextStyle(color: Color(0xFFB76E79), fontSize: 12, fontWeight: FontWeight.w800, fontFamily: 'Tajawal')))),
-            Positioned(
-              bottom: 14, left: 14, right: 14,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text((offer['title_ar'] ?? '').toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white, fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Flexible(child: Text(offer['discounted_price'].toString() + ' د.ع', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, fontFamily: 'Tajawal'), overflow: TextOverflow.ellipsis)),
-                      const SizedBox(width: 10),
-                      Text(offer['original_price'].toString() + ' د.ع', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.7), decoration: TextDecoration.lineThrough, fontFamily: 'Tajawal')),
-                    ],
+    final img = (url != null && url.toString().startsWith('http'))
+        ? url.toString()
+        : 'assets/images/treatment.jpg';
+
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BookingScreen(serviceName: (offer['title_ar'] ?? '').toString()),
+        ),
+      ),
+      child: Container(
+        width: 280,
+        margin: const EdgeInsets.only(left: 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _img(img),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, const Color(0xFF7A3B47).withOpacity(0.9)],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    'خصم $discount%',
+                    style: const TextStyle(
+                      color: Color(0xFFB76E79),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'Tajawal',
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 14,
+                left: 14,
+                right: 14,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      (offer['title_ar'] ?? '').toString(),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        fontFamily: 'Tajawal',
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '${offer['discounted_price']} د.ع',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              fontFamily: 'Tajawal',
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${offer['original_price']} د.ع',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.7),
+                            decoration: TextDecoration.lineThrough,
+                            fontFamily: 'Tajawal',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ).animate().fadeIn(delay: const Duration(milliseconds: 100), duration: 600.ms);
@@ -413,10 +913,38 @@ class _HomeContentState extends State<HomeContent> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
-          Container(width: 5, height: 22, decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFB76E79), Color(0xFFE8B4B8)]), borderRadius: BorderRadius.circular(4))),
+          Container(
+            width: 5,
+            height: 22,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFFB76E79), Color(0xFFE8B4B8)]),
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
           const SizedBox(width: 10),
-          Expanded(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal'), overflow: TextOverflow.ellipsis)),
-          GestureDetector(onTap: onAll, child: Text('عرض الكل', style: TextStyle(fontSize: 13, color: const Color(0xFFB76E79).withOpacity(0.9), fontFamily: 'Tajawal'))),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF333333),
+                fontFamily: 'Tajawal',
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          GestureDetector(
+            onTap: onAll,
+            child: Text(
+              'عرض الكل',
+              style: TextStyle(
+                fontSize: 13,
+                color: const Color(0xFFB76E79).withOpacity(0.9),
+                fontFamily: 'Tajawal',
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -424,7 +952,10 @@ class _HomeContentState extends State<HomeContent> {
 
   Widget _buildServices() {
     if (_services.isEmpty) {
-      return const SizedBox(height: 60, child: Center(child: Text('لا توجد خدمات', style: TextStyle(fontFamily: 'Tajawal'))));
+      return const SizedBox(
+        height: 60,
+        child: Center(child: Text('لا توجد خدمات', style: TextStyle(fontFamily: 'Tajawal'))),
+      );
     }
     return SizedBox(
       height: 220,
@@ -435,14 +966,27 @@ class _HomeContentState extends State<HomeContent> {
         itemBuilder: (context, index) {
           final s = _services[index];
           final name = (s['name_ar'] ?? '').toString();
-          final price = s['price_iqd'].toString();
-          final duration = s['duration_minutes'].toString();
+          final price = (s['price_iqd'] ?? 0).toString();
+          final duration = (s['duration_minutes'] ?? 45).toString();
           return GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BookingScreen(serviceName: name))),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => BookingScreen(serviceName: name)),
+            ),
             child: Container(
               width: 165,
               margin: const EdgeInsets.only(left: 12),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 6))]),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFB76E79).withOpacity(0.15),
+                    blurRadius: 15,
+                    offset: const Offset(0, 6),
+                  )
+                ],
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -455,7 +999,26 @@ class _HomeContentState extends State<HomeContent> {
                         fit: StackFit.expand,
                         children: [
                           _img(_serviceImage(s)),
-                          Positioned(bottom: 8, right: 8, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(12)), child: Text(price + ' د.ع', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFB76E79), fontFamily: 'Tajawal')))),
+                          Positioned(
+                            bottom: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.9),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '$price د.ع',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFB76E79),
+                                  fontFamily: 'Tajawal',
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -465,14 +1028,32 @@ class _HomeContentState extends State<HomeContent> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF333333),
+                            fontFamily: 'Tajawal',
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         const SizedBox(height: 6),
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const Icon(Icons.schedule, size: 14, color: Color(0xFFB76E79)),
                             const SizedBox(width: 4),
-                            Flexible(child: Text(duration + ' دقيقة', style: TextStyle(fontSize: 11, color: const Color(0xFF333333).withOpacity(0.6), fontFamily: 'Tajawal'), overflow: TextOverflow.ellipsis)),
+                            Text(
+                              '$duration دقيقة',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: const Color(0xFF333333).withOpacity(0.6),
+                                fontFamily: 'Tajawal',
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ],
                         ),
                       ],
@@ -481,7 +1062,10 @@ class _HomeContentState extends State<HomeContent> {
                 ],
               ),
             ),
-          ).animate().fadeIn(delay: Duration(milliseconds: index * 80), duration: 500.ms).slideY(begin: 0.2, end: 0, duration: 500.ms);
+          ).animate().fadeIn(
+                delay: Duration(milliseconds: index * 80),
+                duration: 500.ms,
+              ).slideY(begin: 0.2, end: 0, duration: 500.ms);
         },
       ),
     );
@@ -493,8 +1077,33 @@ class _HomeContentState extends State<HomeContent> {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(gradient: LinearGradient(colors: [const Color(0xFFB76E79).withOpacity(0.1), const Color(0xFFE8B4B8).withOpacity(0.1)]), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFB76E79).withOpacity(0.2))),
-          child: const Row(children: [Icon(Icons.local_offer, color: Color(0xFFB76E79)), SizedBox(width: 12), Flexible(child: Text('أضيفي عروضاً من لوحة التحكم', style: TextStyle(fontSize: 13, fontFamily: 'Tajawal', color: Color(0xFF333333)), overflow: TextOverflow.ellipsis))]),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFFB76E79).withOpacity(0.1),
+                const Color(0xFFE8B4B8).withOpacity(0.1),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFB76E79).withOpacity(0.2)),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.local_offer, color: Color(0xFFB76E79)),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'أضيفي عروضاً من لوحة التحكم',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontFamily: 'Tajawal',
+                    color: Color(0xFF333333),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -511,7 +1120,10 @@ class _HomeContentState extends State<HomeContent> {
 
   Widget _buildDoctors() {
     if (_doctors.isEmpty) {
-      return const SizedBox(height: 60, child: Center(child: Text('لا يوجد أطباء', style: TextStyle(fontFamily: 'Tajawal'))));
+      return const SizedBox(
+        height: 60,
+        child: Center(child: Text('لا يوجد أطباء', style: TextStyle(fontFamily: 'Tajawal'))),
+      );
     }
     return SizedBox(
       height: 190,
@@ -523,31 +1135,123 @@ class _HomeContentState extends State<HomeContent> {
           final d = _doctors[index];
           final name = (d['name'] ?? '').toString();
           final spec = (d['specialty'] ?? '').toString();
-          return Container(
-            width: 160,
-            margin: const EdgeInsets.only(left: 12),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 6))]),
-            child: Column(
-              children: [
-                Stack(
-                  children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(shape: BoxShape.circle, gradient: const LinearGradient(colors: [Color(0xFFE8B4B8), Color(0xFFB76E79)]), border: Border.all(color: Colors.white, width: 3), boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.4), blurRadius: 12)]),
-                      child: d['image_url'] != null && d['image_url'].toString().startsWith('http') ? ClipOval(child: Image.network(d['image_url'].toString(), fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.person, color: Colors.white, size: 30))) : const Icon(Icons.person, color: Colors.white, size: 30),
-                    ),
-                    Positioned(bottom: 0, left: 0, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: const Color(0xFFD4AF37), borderRadius: BorderRadius.circular(8)), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.star, size: 10, color: Colors.white), SizedBox(width: 2), Text('5.0', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w800))]))),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 6),
-                Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: const Color(0xFFB76E79).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Text(spec, style: const TextStyle(fontSize: 11, color: Color(0xFFB76E79), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis)),
-              ],
+          final imgUrl = (d['image_url'] ?? '').toString();
+          return GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => DoctorDetailsScreen(doctor: d)),
             ),
-          ).animate().fadeIn(delay: Duration(milliseconds: index * 80), duration: 500.ms);
+            child: Container(
+              width: 160,
+              margin: const EdgeInsets.only(left: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFB76E79).withOpacity(0.15),
+                    blurRadius: 15,
+                    offset: const Offset(0, 6),
+                  )
+                ],
+              ),
+              child: Column(
+                children: [
+                  Stack(
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFE8B4B8), Color(0xFFB76E79)],
+                          ),
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFB76E79).withOpacity(0.4),
+                              blurRadius: 12,
+                            )
+                          ],
+                        ),
+                        child: imgUrl.startsWith('http')
+                            ? ClipOval(
+                                child: Image.network(
+                                  imgUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (c, e, s) =>
+                                      const Icon(Icons.person, color: Colors.white, size: 30),
+                                ),
+                              )
+                            : const Icon(Icons.person, color: Colors.white, size: 30),
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD4AF37),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.star, size: 10, color: Colors.white),
+                              SizedBox(width: 2),
+                              Text(
+                                '5.0',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF333333),
+                      fontFamily: 'Tajawal',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFB76E79).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      spec,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFFB76E79),
+                        fontFamily: 'Tajawal',
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ).animate().fadeIn(
+                delay: Duration(milliseconds: index * 80),
+                duration: 500.ms,
+              );
         },
       ),
     );
@@ -555,7 +1259,10 @@ class _HomeContentState extends State<HomeContent> {
 
   Widget _buildBranches() {
     if (_branches.isEmpty) {
-      return const SizedBox(height: 60, child: Center(child: Text('لا توجد فروع', style: TextStyle(fontFamily: 'Tajawal'))));
+      return const SizedBox(
+        height: 60,
+        child: Center(child: Text('لا توجد فروع', style: TextStyle(fontFamily: 'Tajawal'))),
+      );
     }
     return SizedBox(
       height: 100,
@@ -565,16 +1272,32 @@ class _HomeContentState extends State<HomeContent> {
         itemCount: _branches.length,
         itemBuilder: (context, index) {
           final b = _branches[index];
-          final bName = (b['name_ar'] ?? '').toString();
-          final bAddr = (b['address'] ?? '').toString();
           return Container(
             width: 240,
             margin: const EdgeInsets.only(left: 12),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: const Color(0xFFB76E79).withOpacity(0.12), blurRadius: 10, offset: const Offset(0, 4))]),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFB76E79).withOpacity(0.12),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ],
+            ),
             child: Row(
               children: [
-                Container(width: 40, height: 40, decoration: BoxDecoration(color: const Color(0xFFB76E79).withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.location_on, color: Color(0xFFB76E79), size: 20)),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFB76E79).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.location_on, color: Color(0xFFB76E79), size: 20),
+                ),
                 const SizedBox(width: 10),
                 SizedBox(
                   width: 150,
@@ -582,15 +1305,37 @@ class _HomeContentState extends State<HomeContent> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(bName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF333333), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(
+                        (b['name_ar'] ?? '').toString(),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF333333),
+                          fontFamily: 'Tajawal',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       const SizedBox(height: 3),
-                      Text(bAddr, style: TextStyle(fontSize: 10, color: const Color(0xFF333333).withOpacity(0.5), fontFamily: 'Tajawal'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(
+                        (b['address'] ?? '').toString(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: const Color(0xFF333333).withOpacity(0.5),
+                          fontFamily: 'Tajawal',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
-          ).animate().fadeIn(delay: Duration(milliseconds: index * 80), duration: 500.ms);
+          ).animate().fadeIn(
+                delay: Duration(milliseconds: index * 80),
+                duration: 500.ms,
+              );
         },
       ),
     );
