@@ -37,7 +37,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       }
     } catch (e) {
-      print('Error loading user data: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -56,6 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F4F0),
+      // ✅ الحل هنا: استخدام CustomScrollView مع إضافة SliverToBoxAdapter في النهاية كمساحة فارغة
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
@@ -89,7 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -106,6 +106,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildMenuItem(Icons.settings, 'الإعدادات', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()))),
                   const SizedBox(height: 24),
                   _buildLogoutButton(),
+                  
+                  // ✅ هذا السطر هو الذي يرفع المحتوى ويمنع اختفاء زر تسجيل الدخول تحت الشريط الأسود
+                  const SizedBox(height: 120), 
                 ],
               ),
             ),
@@ -190,14 +193,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
-  void _requireAuth() {
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-        );
-      });
-    }
-  }}
+}

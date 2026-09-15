@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../login_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
@@ -27,9 +27,8 @@ class _BookingScreenState extends State<BookingScreen> {
   final TextEditingController _notesCtrl = TextEditingController();
   final TextEditingController _phoneCtrl = TextEditingController();
 
-  // ساعات العمل: 9 صباحاً إلى 10 مساءً (فتحات نصف ساعة)
   static const int _startHour = 9;
-  static const int _endHour = 22; // 10 مساءً = 22
+  static const int _endHour = 22;
   static const int _slotMinutes = 30;
 
   List<String> get _timeSlots {
@@ -58,7 +57,6 @@ class _BookingScreenState extends State<BookingScreen> {
     final c = Supabase.instance.client;
     final u = c.auth.currentUser;
     
-    // تحميل رقم الهاتف المحفوظ
     if (u != null) {
       try {
         final p = await c.from('profiles').select('phone').eq('id', u.id).maybeSingle();
@@ -105,7 +103,7 @@ class _BookingScreenState extends State<BookingScreen> {
     final today = DateTime(now.year, now.month, now.day);
     final selDay = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
     
-    if (selDay.isAfter(today)) return false; // يوم مستقبلي = كل الأوقات متاحة
+    if (selDay.isAfter(today)) return false;
     
     final parts = time.split(':');
     final slotTime = DateTime(now.year, now.month, now.day, int.parse(parts[0]), int.parse(parts[1]));
@@ -216,21 +214,15 @@ class _BookingScreenState extends State<BookingScreen> {
         centerTitle: true,
       ),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        // ✅ التعديل هنا: زيادة المسافة من الأسفل لضمان ظهور زر الإرسال فوق الشريط الأسود
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
         children: [
-          // الخدمة
           _dropdown('الخدمة', _services, (s) => (s['name_ar'] ?? '').toString(), _service, (v) { setState(() { _service = v; _selectedTime = null; }); }),
           const SizedBox(height: 14),
-          
-          // الفرع
           _dropdown('الفرع', _branches, (s) => (s['name_ar'] ?? '').toString(), _branch, (v) { setState(() { _branch = v; _selectedTime = null; }); _loadBookedSlots(); }),
           const SizedBox(height: 14),
-          
-          // الطبيب
           _dropdown('الطبيب', _doctors, (s) => (s['name'] ?? '').toString(), _doctor, (v) { setState(() { _doctor = v; _selectedTime = null; }); _loadBookedSlots(); }),
           const SizedBox(height: 14),
-          
-          // رقم الهاتف
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
@@ -247,8 +239,6 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          
-          // ========== اختيار التاريخ ==========
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -278,8 +268,6 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          
-          // ========== اختيار الوقت ==========
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -337,8 +325,6 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          
-          // الملاحظات
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
@@ -355,8 +341,6 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          
-          // زر الإرسال
           ElevatedButton(
             onPressed: _submitting ? null : _submit,
             style: ElevatedButton.styleFrom(
@@ -398,4 +382,5 @@ class _BookingScreenState extends State<BookingScreen> {
         );
       });
     }
-  }}
+  }
+}
