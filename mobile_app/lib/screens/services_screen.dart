@@ -59,7 +59,8 @@ class _ServicesScreenState extends State<ServicesScreen> {
               onRefresh: _load,
               color: const Color(0xFFB76E79),
               child: ListView.builder(
-                padding: const EdgeInsets.all(20),
+                // ✅ التعديل هنا: زيادة المسافة من الأسفل لمنع اختفاء آخر خدمة
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
                 itemCount: _services.length,
                 itemBuilder: (context, index) {
                   final s = _services[index];
